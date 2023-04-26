@@ -1,0 +1,306 @@
+---
+title: "R Notebook"
+output:
+  pdf_document: default
+  html_document:
+    toc: yes
+    df_print: paged
+  html_notebook:
+    toc: yes
+---
+
+```{r}
+library(tinytex)
+library(tidyverse)
+library(dplyr)
+dfA <- ELEC_copy
+dfB <- ELEC2
+```
+
+##MILESTONE2.A MIILESTONE2.A EDA journey First we analyse the First Dataset, % of Elctricity per country per year. -Which Data set columns can be clean in order to do a more concise analysis? -
+
+```{r}
+summary(dfA)
+```
+
+With a brief summary we noticed the following:
+
+-There is no data for the years: 1960-1981 and 2021 -First Register is 1990 with 158 missing values -Last register in 2020 has only 2-3 missing values , we see this since 2009
+
+We also can get the following insights:
+
+We Clean the Data in order to eliminate redundant columns:
+
+```{r}
+dfa1 <- select(dfA,-('1960':'1989'),-'2021',-'Indicator Name',-'Indicator Code')
+```
+
+First thing to analyse is to compare the data of 1990 (Our starting point) and 2020 (ending point)
+
+Which are the overall differences between 1990 and 2020? What is the country with less % of population with electricity in 1990? What is the country with less % of population with electricity in 2020?
+
+```{r}
+summary(dfa1[c('1990','2020')])
+min2020 <- which.min(dfa1$'2020')
+CNM2020 <- dfa1$'Country Name'[min2020]
+min1990 <- which.min(dfa1$'1990')
+CNM1990 <- dfa1$'Country Name'[min1990]
+#Which was the least covered country in 1990?
+CNM1990
+#Which was the least covered country in 2020?
+CNM2020
+```
+
+South Sudan numbers are quite low, we want to do a deep dive in order to understand it better:
+
+```{r}
+dfa1 %>% filter(dfa1$'Country Name' == 'South Sudan')
+```
+
+We can see South Sudan has data since 2006 were it started with 0,6%, and they been improving slowly. The value is surprisingly low, but it´s consistent trough the years and it´s improving.
+
+We also want to Deep dive in Zambia, have they improved?
+
+```{r}
+dfa1 %>% filter(dfa1$'Country Name' == 'Zambia')
+```
+
+We see Zambia has improved from 13.90% in 1990 to 44.5% in 2020. Despite the 2020 number is low, they have improved over the years.
+
+We are from Chile and Colombia, we are interested to see our nation's statistics:
+
+```{r}
+dfa1 %>% filter(dfa1$`Country Name` %in% c("Chile","Colombia"))
+```
+
+We see a positive trend, with 100% coverage in 2020.
+
+How many countries in 2022 are below the global average of 2022 (86.412%)? What is the % of those countries?
+
+```{r}
+
+avg2020 <- mean(dfa1$`2020`,na.rm = TRUE)
+dfa1 <- dfa1 %>%
+mutate(
+global_average=
+  ifelse(
+    dfa1$`2020` < avg2020
+    ,1,0))
+sum(dfa1$`global_average`,na.rm=TRUE) 
+sum(dfa1$`global_average`,na.rm=TRUE)/length(dfa1$`global_average`) * 100
+
+
+```
+
+From those nations below the global average(2020), what is the average accesses of electricity coverage?
+
+```{r}
+
+dfa1_below <- dfa1 %>% filter(dfa1$`global_average`== 1)
+mean(dfa1_below$`2020`,na.rm = TRUE)
+```
+
+Which are the top 10 nations with lowest % of electricity coverage in 2020? What is the difference between 2000 and 2020?
+
+```{r}
+
+dfa1 <-dfa1 %>% 
+  mutate(
+    difference_between_2020_2000 = dfa1$"2020" - dfa1$"2000"
+  )
+dfbottom = dfa1[order(dfa1$"2020", decreasing = FALSE), ] %>% 
+  select("Country Name", "2020","difference_between_2020_2000")
+dfbottom %>% head(10)
+```
+
+Are there any nations which had decrease the percentage decrease over that period? Which are the countries?
+
+```{r}
+
+dfa1 <-dfa1 %>% 
+  mutate(
+    difference_between_2020_2000 = dfa1$"2020" - dfa1$"2000"
+  )
+dfa1 %>% 
+  arrange(difference_between_2020_2000) %>% 
+  select(`Country Name`, difference_between_2020_2000) %>% 
+  head(3)
+
+```
+
+How many countries are over 95% of coverage? What is their % ?
+
+```{r}
+dftop <- dfa1 %>%
+  filter(`2020` > 95) %>% 
+  nrow()
+print(dftop)
+sum(dftop)/length(dfa1$"2020") *100
+```
+
+It´s impressive to see 65% of the nations are over 95%.
+
+##MILESTONE2-B: In order to build interesting tables, We want to understand the second database in our database:
+
+```{r}
+summary(dfB)
+unique(dfB$Region)
+unique(dfB$IncomeGroup)
+```
+
+We see we have 8 Unique region and 4 income level. We want to understand the data by Region and Income Level so we joined de data frames
+
+```{r}
+#We will leftjoin the dataset in order to understand the data by nation at a region and income level
+dfull <- dfa1 %>% 
+  left_join(dfB, 
+            by = 'Country Code') 
+```
+
+For the first table we want to see a summary of the general information by Region.
+
+```{r}
+library("kableExtra")
+library("knitr")
+RegionGroup <- dfull %>% 
+group_by(Region) %>% 
+  summarise(
+    Total_Nations = length(`2020`),
+    Mean_2020 = mean(`2020`,na.rm = TRUE),
+    Mean_2010 = mean(`2010`,na.rm = TRUE),
+    Mean_2000 = mean(`2000`,na.rm = TRUE),
+    Below_Global_AVG = mean(`global_average`,na.rm = TRUE))%>%
+  arrange(desc(Mean_2020),.by_group = FALSE)%>%
+  filter(Region != "")
+kable(RegionGroup,caption= "<ul>
+                  Summary Statistics by Region:
+                  <li>In 2020 they only region below 90% is Sub-Saharan Africa</li>
+                  <li>All regions have improved trhough the years</li>
+                  <li>Almost 90% of Sub-Saharan Africa are below global avg</li>") %>%
+  kable_styling()
+```
+
+For the second table we want to see a summary of the general information by Income level.
+
+```{r}
+IncomeGroup <- dfull %>% 
+group_by(IncomeGroup) %>% 
+  summarise(
+    Total_Nations = length(`2020`),
+    Mean_2020 = mean(`2020`,na.rm = TRUE),
+    Mean_2010 = mean(`2010`,na.rm = TRUE),
+    Mean_2000 = mean(`2000`,na.rm = TRUE),
+    Below_Global_AVG = mean(`global_average`,na.rm = TRUE))%>%
+  arrange(desc(Mean_2020),.by_group = FALSE)%>%
+  filter(IncomeGroup != "")
+kable(IncomeGroup,caption= "<ul>
+                  Summary Statistics by Income Group:
+                  <li>In 2020 they Lower income levels are below 85%</li>
+                  <li>All regions have improved trhough the years</li>
+                  <li>More than 90% of Low Income level are below global avg</li>") %>%
+  kable_styling()
+```
+
+We want to do a third table in order tO understand the situation of Sub-Saharan Africa per Income level
+
+```{r}
+RegionGroupIncome <- dfull %>% 
+group_by(Region,IncomeGroup) %>% 
+  summarise(
+    Total_Nations = length(`2020`),
+    Mean_2020 = mean(`2020`,na.rm = TRUE),
+    Mean_2010 = mean(`2010`,na.rm = TRUE),
+    Mean_2000 = mean(`2000`,na.rm = TRUE),
+    Below_Global_AVG = mean(`global_average`,na.rm = TRUE))%>%
+  arrange(desc(Mean_2020),.by_group = FALSE)%>%
+  filter(
+    (Region != "") & 
+    (IncomeGroup != "") &
+    (Region == "Sub-Saharan Africa")
+    )
+kable(RegionGroupIncome,caption= "<ul>
+                  Summary Statistics by Income Group in Sub-Saharan Africa :
+                  <li>Critical Situation for Lowe Income</li>
+                  <li>100% of lowest income are below Global Average</li>
+                  ") %>%
+  kable_styling()
+```
+
+##Milestone2C
+
+```{r}
+RegionGroup <- RegionGroup %>% arrange(desc(Mean_2020))
+ggplot(RegionGroup, aes(reorder((x = Region),Mean_2020), y = Mean_2020,fill = Region == "Sub-Saharan Africa", width = 0.8)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("green", "red"), 
+                    breaks = c(FALSE, TRUE),
+                    labels = c("Other regions", "Sub-Saharan Africa")) +
+  labs(title = "% of Population with Access to electricity in 2020 per Region",
+        x = "Region", y = "% Electricity", caption = "Sub-Saharan region is the only one facing electricity challenges in 2020") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+         plot.margin = unit(c(0.1,0.5,0.1,0,1,0.1), "cm"),
+         plot.caption = element_text(hjust = 0, margin = margin(10, 0, 10, 0))) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, by = 20), labels = paste0(seq(0, 100, by = 20), "%")) +
+  guides(fill = guide_legend(override.aes = list(width = 0.8, size = 2)))
+```
+
+```{r}
+RegionGroup <- RegionGroup %>% arrange(desc(Mean_2020))
+ggplot(IncomeGroup, aes(reorder((x = IncomeGroup),Mean_2020), y = Mean_2020,fill = IncomeGroup == "Low income", width = 0.8)) + 
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("green", "red"), 
+                    breaks = c(FALSE, TRUE),
+                    labels = c("Other Incomes", "Low income")) +
+  labs(title = "% of Population with Access to electricity in 2020 per Income Level",
+        x = "Region", y = "% Electricity", caption = "Low income level is the only one facing electricity challenges in 2020") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+         plot.margin = unit(c(0.1,0.5,0.1,0,1,0.1), "cm"),
+         plot.caption = element_text(hjust = 0, margin = margin(10, 0, 10, 0))) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, by = 20), labels = paste0(seq(0, 100, by = 20), "%")) +
+  guides(fill = guide_legend(override.aes = list(width = 0.8, size = 2)))
+
+
+```
+
+```{r}
+ggplot(RegionGroupIncome, aes(reorder((x = IncomeGroup),Mean_2020), y = Mean_2020,width = 0.8)) + 
+  geom_bar(stat = "identity")  +
+  labs(title = "% Access to electricity in 2020 per Income Level from Sub-Saharan Africa ",
+        x = "Region", y = "% Electricity", caption = "There is clear realtion with income and Low Income is in a critical situation") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+         plot.margin = unit(c(0.1,0.5,0.1,0,1,0.1), "cm"),
+         plot.caption = element_text(hjust = 0, margin = margin(10, 0, 10, 0))) +
+  scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, by = 20), labels = paste0(seq(0, 100, by = 20), "%")) +
+  guides(fill = guide_legend(override.aes = list(width = 0.8, size = 2)))
+```
+
+```{r}
+dfa1_subset <- dfa1[,c("Country Name", as.character(1990:2020))]
+
+dfa1_long <- dfa1_subset %>%
+  pivot_longer(cols = -c("Country Name"), names_to = "Year", values_to = "Percentage")
+
+dfa1_long$Year <- as.numeric(dfa1_long$Year)
+
+dfa1_long <- dfa1_long %>% na.omit();
+ggplot(dfa1_long[dfa1_long$`Country Name` == "Sub-Saharan Africa",], 
+       aes(
+         x = Year, 
+         y = Percentage,
+         color = "Sub-Saharan Africa",
+         group = 1)) +
+geom_line(linewidth = 1.3) +
+geom_line(data = dfa1_long[dfa1_long$`Country Name` == "World",], 
+          aes(x = Year, 
+              y = Percentage,
+              color = "World",
+              group = 1), 
+          linewidth = 1.3) +
+ggtitle("Access to Electricity in Sub-Saharan Africa") +
+xlab("Year") +
+ylab("Percentage of the Population") +
+scale_y_continuous(limits = c(0, 100)) +
+
+labs(subtitle = "Despite the situation is critical, we see an evoulution trhough time") +
+guides(color = guide_legend(title = "Country"))
+```
